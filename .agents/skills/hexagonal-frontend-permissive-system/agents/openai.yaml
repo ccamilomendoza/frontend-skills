@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hexagonal Frontend Permissive (System)"
+  short_description: "Structure permissive hexagonal frontends"
+  default_prompt: "Use $hexagonal-frontend-permissive-system to structure this frontend with permissive acyclic module imports."

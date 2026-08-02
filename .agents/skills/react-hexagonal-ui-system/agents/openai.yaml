@@ -1,0 +1,4 @@
+interface:
+  display_name: "React Hexagonal UI (System)"
+  short_description: "Build React adapters for hexagonal frontends"
+  default_prompt: "Use $react-hexagonal-ui-system to structure this React UI within a functional hexagonal frontend."

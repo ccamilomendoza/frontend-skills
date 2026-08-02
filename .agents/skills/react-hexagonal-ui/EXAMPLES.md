@@ -130,6 +130,74 @@ const fetchPaymentDetailsErrorMessageKeys: Record<
   NetworkError: "payments.errors.network",
 };
 
+const paymentDetailsEmptyState = {
+  data: undefined,
+  isSuccess: true,
+  isError: false,
+  isEmpty: true,
+} as const;
+
+const paymentDetailsErrorState = {
+  data: undefined,
+  isSuccess: false,
+  isError: true,
+  isEmpty: false,
+} as const;
+
+const toPaymentDetailsViewModel = ({
+  paymentDetails,
+}: {
+  readonly paymentDetails: {
+    readonly merchantName: string;
+    readonly amount: {
+      readonly minorUnits: number;
+      readonly currency: string;
+    };
+  };
+}) => ({
+  merchantName: paymentDetails.merchantName,
+  amountInMinorUnits: paymentDetails.amount.minorUnits,
+  currency: paymentDetails.amount.currency,
+});
+
+const toPaymentDetailsFetchState = ({
+  result,
+  t,
+}: {
+  readonly result: Awaited<
+    ReturnType<ReturnType<typeof fetchPaymentDetails>>
+  >;
+  readonly t: (key: string) => string;
+}) => {
+  if (result.ok) {
+    return {
+      state: {
+        data: toPaymentDetailsViewModel({
+          paymentDetails: result.value,
+        }),
+        isSuccess: true,
+        isError: false,
+        isEmpty: false,
+      } as const,
+      errorMessage: undefined,
+    };
+  }
+
+  if (result.error.type === "PaymentNotFound") {
+    return {
+      state: paymentDetailsEmptyState,
+      errorMessage: undefined,
+    };
+  }
+
+  return {
+    state: paymentDetailsErrorState,
+    errorMessage: t(
+      fetchPaymentDetailsErrorMessageKeys[result.error.type],
+    ),
+  };
+};
+
 export const useFetchPaymentDetails = (
   request: FetchPaymentDetailsArgs,
 ) => {
@@ -140,49 +208,14 @@ export const useFetchPaymentDetails = (
   });
 
   const result = query.data;
-
-  if (!result.ok) {
-    if (result.error.type === "PaymentNotFound") {
-      return {
-        state: {
-          data: undefined,
-          isSuccess: true,
-          isError: false,
-          isEmpty: true,
-        } as const,
-        errorMessage: undefined,
-        isFetching: query.isFetching,
-        refetch: query.refetch,
-      };
-    }
-
-    return {
-      state: {
-        data: undefined,
-        isSuccess: false,
-        isError: true,
-        isEmpty: false,
-      } as const,
-      errorMessage: t(
-        fetchPaymentDetailsErrorMessageKeys[result.error.type],
-      ),
-      isFetching: query.isFetching,
-      refetch: query.refetch,
-    };
-  }
+  const { state, errorMessage } = toPaymentDetailsFetchState({
+    result,
+    t,
+  });
 
   return {
-    state: {
-      data: {
-        merchantName: result.value.merchantName,
-        amountInMinorUnits: result.value.amount.minorUnits,
-        currency: result.value.amount.currency,
-      },
-      isSuccess: true,
-      isError: false,
-      isEmpty: false,
-    } as const,
-    errorMessage: undefined,
+    state,
+    errorMessage,
     isFetching: query.isFetching,
     refetch: query.refetch,
   };
@@ -239,12 +272,12 @@ interface PaymentDetailsProps {
     readonly amountInMinorUnits: number;
     readonly currency: string;
   };
-  readonly isFetching: boolean;
+  readonly isRefreshing: boolean;
 }
 
 export const PaymentDetails = ({
   paymentDetails,
-  isFetching,
+  isRefreshing,
 }: PaymentDetailsProps) => {
   const amount = new Intl.NumberFormat(undefined, {
     style: "currency",
@@ -252,7 +285,7 @@ export const PaymentDetails = ({
   }).format(paymentDetails.amountInMinorUnits / 100);
 
   return (
-    <section aria-busy={isFetching}>
+    <section aria-busy={isRefreshing}>
       <h2>{paymentDetails.merchantName}</h2>
       <p>{amount}</p>
     </section>
@@ -306,7 +339,7 @@ export const PaymentDetailsContent = ({
         renderElement: ({ data: paymentDetails }) => (
           <PaymentDetails
             paymentDetails={paymentDetails}
-            isFetching={isFetching}
+            isRefreshing={isFetching}
           />
         ),
       }}
@@ -405,6 +438,44 @@ const processPaymentErrorMessageKeys: Record<
   OrderAlreadyProcessed: "payments.errors.orderAlreadyProcessed",
 };
 
+const toProcessPaymentErrorMessage = ({
+  error,
+  t,
+}: {
+  readonly error: ProcessPaymentError;
+  readonly t: (key: string) => string;
+}) => t(processPaymentErrorMessageKeys[error.type]);
+
+const toProcessPaymentMutationErrorMessage = ({
+  expectedError,
+  hasUnexpectedError,
+  t,
+}: {
+  readonly expectedError?: ProcessPaymentError;
+  readonly hasUnexpectedError: boolean;
+  readonly t: (key: string) => string;
+}) => {
+  if (expectedError) {
+    return toProcessPaymentErrorMessage({ error: expectedError, t });
+  }
+
+  if (hasUnexpectedError) return t("payments.errors.unexpected");
+
+  return undefined;
+};
+
+const toPaymentReceipt = ({
+  receipt,
+}: {
+  readonly receipt: {
+    readonly id: string;
+    readonly paymentId: string;
+  };
+}) => ({
+  receiptId: receipt.id,
+  paymentId: receipt.paymentId,
+});
+
 export const useProcessPayment = () => {
   const { t } = useTranslation();
   const { handleSuccess } = useProcessPaymentSuccess();
@@ -415,9 +486,10 @@ export const useProcessPayment = () => {
     onSuccess: (result, args) => {
       if (!result.ok) {
         handleError({
-          errorMessage: t(
-            processPaymentErrorMessageKeys[result.error.type],
-          ),
+          errorMessage: toProcessPaymentErrorMessage({
+            error: result.error,
+            t,
+          }),
         });
         return;
       }
@@ -440,16 +512,13 @@ export const useProcessPayment = () => {
   return {
     processPayment: mutation.mutate,
     paymentReceipt: result?.ok
-      ? {
-          receiptId: result.value.id,
-          paymentId: result.value.paymentId,
-        }
+      ? toPaymentReceipt({ receipt: result.value })
       : undefined,
-    errorMessage: expectedError
-      ? t(processPaymentErrorMessageKeys[expectedError.type])
-      : mutation.isError
-        ? t("payments.errors.unexpected")
-        : undefined,
+    errorMessage: toProcessPaymentMutationErrorMessage({
+      expectedError,
+      hasUnexpectedError: mutation.isError,
+      t,
+    }),
     isPending: mutation.isPending,
     isSuccess: mutation.isSuccess && result?.ok === true,
     isError: mutation.isError || expectedError !== undefined,
@@ -457,7 +526,7 @@ export const useProcessPayment = () => {
 };
 ```
 
-The nested conditional above only selects a value; use early returns for
+Use small mapping helpers for repeated value selection. Keep early returns for
 behavioral branches such as lifecycle handling.
 
 ## Form And Submit Orchestration

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hexagonal Backend — Permissive"
+  short_description: "Functional hexagonal TypeScript backend architecture"
+  default_prompt: "Use $hexagonal-backend-permissive to structure this TypeScript backend into functional bounded-context modules."
