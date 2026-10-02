@@ -66,11 +66,6 @@ export interface ProcessPaymentDependencies {
   readonly chargePayment: ChargePaymentPort;
 }
 
-export interface ProcessPaymentArgs {
-  readonly orderId: OrderId;
-  readonly amount: Money;
-}
-
 export type ProcessPaymentError =
   | HasProcessedPaymentPortError
   | ChargePaymentPortError
@@ -82,25 +77,23 @@ export type ProcessPaymentError =
 export type ProcessPaymentUseCase = (
   dependencies: ProcessPaymentDependencies,
 ) => (
-  args: ProcessPaymentArgs,
+  request: ChargePaymentPortRequest,
 ) => Promise<Result<Receipt, ProcessPaymentError>>;
 
 export const makeProcessPaymentUseCase: ProcessPaymentUseCase =
-  (dependencies) =>
-  async (args) => {
-    const processed = await dependencies.hasProcessedPayment({
-      orderId: args.orderId,
-    });
+  ({ hasProcessedPayment, chargePayment }) =>
+  async ({ orderId, amount }) => {
+    const processed = await hasProcessedPayment({ orderId });
 
     if (!processed.ok) return err(processed.error);
     if (processed.value) {
       return err({
         type: "OrderAlreadyProcessed",
-        orderId: args.orderId,
+        orderId,
       });
     }
 
-    return dependencies.chargePayment(args);
+    return chargePayment({ orderId, amount });
   };
 ```
 
@@ -113,22 +106,20 @@ export interface FetchUserDependencies {
   readonly fetchUser: FetchUserPort;
 }
 
-export type FetchUserArgs = FetchUserPortRequest;
-export type FetchUserError = FetchUserPortError;
-
 export type FetchUserUseCase = (
   dependencies: FetchUserDependencies,
 ) => (
-  args: FetchUserArgs,
-) => Promise<Result<User, FetchUserError>>;
+  request: FetchUserPortRequest,
+) => Promise<Result<User, FetchUserPortError>>;
 
 export const makeFetchUserUseCase: FetchUserUseCase =
-  (dependencies) =>
-  (args) =>
-    dependencies.fetchUser(args);
+  ({ fetchUser }) =>
+  (request) =>
+    fetchUser(request);
 ```
 
-The UI adapter may bind `args` later to create `() => Promise<Result<...>>`.
+The use case reuses the port request type directly. The UI adapter may bind the
+request later to create `() => Promise<Result<...>>`.
 
 ### Zero-dependency use case
 
@@ -144,14 +135,14 @@ export type PrepareCheckoutUseCase = (
   args: PrepareCheckoutArgs,
 ) => Result<PreparedCheckout, PrepareCheckoutError>;
 
-export const prepareCheckoutUseCase: PrepareCheckoutUseCase = (args) => {
-  if (!canCheckout(args.cart, args.wallet)) {
+export const prepareCheckoutUseCase: PrepareCheckoutUseCase = ({ cart, wallet }) => {
+  if (!canCheckout(cart, wallet)) {
     return err({ type: "InsufficientFunds" });
   }
 
   return ok({
-    cart: args.cart,
-    total: calculateCheckoutTotal(args.cart),
+    cart,
+    total: calculateCheckoutTotal(cart),
   });
 };
 ```
@@ -170,12 +161,12 @@ rules:
 
 ```ts
 export const makeRegisterUserUseCase =
-  (dependencies: RegisterUserDependencies) =>
+  ({ saveUser }: RegisterUserDependencies) =>
   async (args: RegisterUserArgs) => {
     const user = makeUser(args);
     if (!user.ok) return user;
 
-    return dependencies.saveUser({ user: user.value });
+    return saveUser({ user: user.value });
   };
 ```
 
@@ -205,13 +196,13 @@ Map only after parsing:
 
 ```ts
 export const transformReceiptDtoToMakeReceiptArgs = (
-  dto: ReceiptDto,
+  { id, order_id, charged_cents, currency }: ReceiptDto,
 ): MakeReceiptArgs => ({
-  id: { value: dto.id },
-  orderId: { value: dto.order_id },
+  id: { value: id },
+  orderId: { value: order_id },
   charged: {
-    cents: dto.charged_cents,
-    currency: dto.currency,
+    cents: charged_cents,
+    currency,
   },
 });
 ```
@@ -225,10 +216,10 @@ export interface StripeChargePaymentAdapterDependencies {
 
 export const makeStripeChargePaymentAdapter =
   (
-    dependencies: StripeChargePaymentAdapterDependencies,
+    { http }: StripeChargePaymentAdapterDependencies,
   ): ChargePaymentPort =>
   async (request) => {
-    const response = await dependencies.http.post("/charges", request);
+    const response = await http.post("/charges", request);
 
     if (!response.ok) {
       return err({
@@ -259,7 +250,7 @@ domain constructor proves business validity.
 Adapt the application callable inside UI infrastructure:
 
 ```ts
-export const useFetchUser = (request: FetchUserArgs) => {
+export const useFetchUser = (request: FetchUserPortRequest) => {
   const query = useQuery({
     queryKey: userQueryKey(request),
     queryFn: () => fetchUser(request),

@@ -174,7 +174,10 @@ sibling infrastructure.
 ## Schemas and Query Keys
 
 Keep form schemas flat under `schemas/`. Name schema values with a
-`FormSchema` suffix. Reuse pure domain predicates for identical business rules.
+`FormSchema` suffix. Use built-in schema checks for ordinary form feedback.
+Pass domain-owned policy values to built-in checks, or use pure domain
+predicates in refinements, when the form must enforce an identical business
+rule. The domain constructor still decides whether the value is valid.
 
 Export a UI-only `...FormValues` type from the schema only when form values do
 not match an application args contract:
@@ -238,15 +241,15 @@ Treat this matrix as an allowlist:
 | --- | --- |
 | Components | components, presentation hooks, UI/form libraries, declarative router APIs; owned schema types only for a private form contract |
 | Containers | components, hooks, independent child containers, React composition APIs |
-| Hooks | hooks, bound use cases from composition, application contracts, schemas, query keys, hook-oriented libraries; context only in its access hook |
+| Hooks | hooks, bound use cases from composition, application contracts, type-only domain or port inputs reused by a use case, schemas, query keys, hook-oriented libraries; context only in its access hook |
 | Layouts | layouts, React types, styles |
 | Pages | layouts, components, containers, React composition APIs, declarative router primitives |
 | Routers | pages, route fallbacks, router APIs, shared route-tree layouts |
 | Providers | owned contexts, React/provider APIs, intentional provider bundles |
 | Contexts | React and UI-only contracts declared with the context |
 | Compositions | own adapters and application factories; app composition may access explicitly selected modules |
-| Schemas | schema library, pure domain predicates, compatible application contracts |
-| Query keys | application request contracts |
+| Schemas | schema library, domain-owned validation constants and pure predicates, compatible application contracts, type-only domain or port inputs reused by a use case |
+| Query keys | application request contracts, type-only domain or port inputs reused by a use case |
 | App entry | provider bundles, root router, mounting APIs, global styles |
 
 UI roles never import `infrastructure/server/**` directly. The composition file

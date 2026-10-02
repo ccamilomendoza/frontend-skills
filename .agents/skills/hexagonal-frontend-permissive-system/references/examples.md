@@ -28,14 +28,34 @@ src/modules/payments/
     ui/
 ```
 
-Model the valid domain value:
+Declare the domain value in `src/modules/payments/domain/entities/receipt.ts`:
 
 ```ts
+export interface ReceiptId {
+  readonly value: string;
+}
+
+export interface OrderId {
+  readonly value: string;
+}
+
+export interface Money {
+  readonly cents: number;
+  readonly currency: string;
+}
+
 export interface Receipt {
   readonly id: ReceiptId;
   readonly orderId: OrderId;
   readonly charged: Money;
 }
+```
+
+Put invariant-preserving behavior in
+`src/modules/payments/domain/services/receipt-creation.ts`:
+
+```ts
+import type { Money, OrderId, Receipt, ReceiptId } from "../entities/receipt";
 
 export interface MakeReceiptArgs {
   readonly id: ReceiptId;
@@ -101,22 +121,22 @@ export const receiptDtoSchema = z.object({
 });
 
 export const transformReceiptDtoToMakeReceiptArgs = (
-  dto: ReceiptDto,
+  { id, order_id, charged_cents, currency }: ReceiptDto,
 ): MakeReceiptArgs => ({
-  id: { value: dto.id },
-  orderId: { value: dto.order_id },
+  id: { value: id },
+  orderId: { value: order_id },
   charged: {
-    cents: dto.charged_cents,
-    currency: dto.currency,
+    cents: charged_cents,
+    currency,
   },
 });
 
 export const makeStripeChargePaymentAdapter =
   (
-    dependencies: StripeChargePaymentAdapterDependencies,
+    { http }: StripeChargePaymentAdapterDependencies,
   ): ChargePaymentPort =>
   async (request) => {
-    const response = await dependencies.http.post("/charges", request);
+    const response = await http.post("/charges", request);
 
     if (!response.ok) {
       return err({
@@ -176,10 +196,10 @@ export interface StartCheckoutArgs {
 }
 
 export const makeStartCheckoutUseCase =
-  (dependencies: StartCheckoutDependencies) =>
-  async (args: StartCheckoutArgs) => {
-    const user = await dependencies.fetchCurrentUser({
-      sessionId: args.sessionId,
+  ({ fetchCurrentUser }: StartCheckoutDependencies) =>
+  async ({ cartId, sessionId }: StartCheckoutArgs) => {
+    const user = await fetchCurrentUser({
+      sessionId,
     });
 
     if (!user.ok) return err(user.error);
@@ -188,7 +208,7 @@ export const makeStartCheckoutUseCase =
     }
 
     return makeCheckout({
-      cartId: args.cartId,
+      cartId,
       userId: { value: user.value.id },
     });
   };

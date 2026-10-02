@@ -145,9 +145,20 @@ Let the form hook create the form-library object. Let the orchestration hook own
 the submit handler and map form values into application args. Let the component
 render only the contract it receives.
 
+Destructure the values returned by hooks when consuming their fields
+individually. Keep a returned object intact when passing it through as one
+contract, such as a form-library object supplied to a component.
+
+Use the schema library's built-in checks for immediate form feedback on types,
+required fields, and common formats. For an exact domain rule, pass a
+domain-owned policy value to a built-in check when possible, or reuse a pure
+domain predicate through a refinement. The use case still invokes the domain
+constructor; form validation does not establish domain validity.
+
 Avoid duplicated form-value interfaces:
 
-- Reuse the application args type when the form shape matches it exactly.
+- Reuse the use-case input type when the form shape matches it exactly,
+  including when that input is an existing domain or port request type.
 - Otherwise export a UI-only `...FormValues` type from the owned schema file and
   use it in the form hook.
 - Permit a same-module form component to import that type only for typing a

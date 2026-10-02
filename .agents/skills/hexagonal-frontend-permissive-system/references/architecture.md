@@ -39,8 +39,12 @@ Keep `domain/` pure and dependency-free except for compatible primitives from
 
 - Name entities as plain domain nouns without an `Entity` suffix.
 - Use readonly interfaces, including for value-like concepts.
+- Keep entity files declaration-only: allow readonly interface declarations
+  and type-only imports, but no runtime values or functions.
 - Keep methods, framework decorators, persistence annotations, and mutation out.
-- Put behavior in pure domain functions.
+- Put behavior in pure domain functions under `domain/services/`.
+
+`src/modules/users/domain/entities/user.ts`:
 
 ```ts
 export interface UserId {
@@ -65,7 +69,11 @@ behavior group and avoid a `Service` suffix.
 
 Use smart constructors to protect invariants:
 
+`src/modules/users/domain/services/user-creation.ts`:
+
 ```ts
+import type { User, UserId, Email } from "../entities/user";
+
 export interface MakeUserArgs {
   readonly id: UserId;
   readonly email: Email;
@@ -85,9 +93,14 @@ export const makeUser = (
     : ok(args);
 ```
 
-Export a pure predicate separately when UI validation must reuse exactly the
-same business rule. The predicate remains domain-owned; the UI schema invokes
-it.
+Use the domain smart constructor as the final authority for valid domain
+values, even when a UI form already validated its input. A form schema may use
+its library's built-in checks for immediate type, required-field, and common
+format feedback. When the form must enforce an identical domain rule, pass a
+domain-owned policy value from `domain/constants/` to a built-in check where
+possible (for example, `.min(domainMinimum)` or `.regex(domainPattern)`).
+Otherwise, invoke a pure domain predicate through a refinement. Do not create
+domain predicates only to wrap form-library checks.
 
 ### Ports
 
@@ -127,9 +140,12 @@ Use these placement tests:
 Do not let a use case instantiate an HTTP client, repository, adapter, router,
 or framework object. Bind those dependencies at a composition root.
 
-Name supporting contracts `...Dependencies` and `...Args`. Keep operation error
-unions narrow. Return `Promise<Result<T, E>>` only when the operation is
-actually asynchronous.
+Name dependency contracts `...Dependencies`. Use an existing domain or port
+request type directly when it already expresses the use-case input. Declare a
+`...Args` interface only for a distinct use-case input; do not alias an
+unchanged input or error type just to rename it. Keep operation error unions
+narrow. Return `Promise<Result<T, E>>` only when the operation is actually
+asynchronous.
 
 ## Infrastructure Layer
 
@@ -225,7 +241,7 @@ generic controls may originate directly in `shared/infrastructure/ui/`.
 | Port error | `...PortError` |
 | Use case type | `...UseCase` |
 | Dependencies | `...Dependencies` |
-| Execution values | `...Args` |
+| Distinct use-case input | `...Args` |
 | Adapter | `...Adapter` |
 | Adapter factory | `make...Adapter` only when binding dependencies |
 | DTO | `...Dto` |

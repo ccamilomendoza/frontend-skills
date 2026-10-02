@@ -699,9 +699,9 @@ them.
 
 **What may form schemas import?**
 
-Form schemas may import their schema-validation library, pure domain validation
-functions when reusing the same business rule, and application request
-contracts when needed to verify schema compatibility.
+Form schemas may import their schema-validation library, domain-owned
+validation constants or pure functions when reusing the same business rule,
+and application request contracts when needed to verify schema compatibility.
 
 Schemas do not import other UI concepts, use cases, ports, or adapters. They
 define validation and do not coordinate behavior.

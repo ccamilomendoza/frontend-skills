@@ -37,11 +37,22 @@ Return the complete form-library object from the form hook when a private form
 component needs its coherent registration and validation API. This is a narrow
 exception to curated request-hook returns.
 
+Use built-in schema checks and transforms for immediate field feedback, such as
+`z.string().trim().min(1)`. Keep domain invariants in pure domain functions
+and enforce them again in the use case or adapter through a smart constructor.
+For an exact domain rule, use a domain-owned policy value with a built-in check
+such as `.min(minimumLength)` or `.regex(emailPattern)`. Use `.refine(predicate)`
+when the rule cannot be expressed that way. Zod's `.email()` is useful for
+generic form feedback, but do not assume it accepts exactly the same strings
+as a domain-owned email rule. Surface domain errors from the use case because
+form validation alone does not establish domain validity.
+
 ## Form-Value Ownership
 
 Avoid two handwritten definitions of the same form shape.
 
-If the form fields exactly match application args, use that contract:
+If the form fields exactly match the use-case input, use that type directly,
+including when the use case reuses a domain or port request type:
 
 ```ts
 export const paymentFormSchema:
@@ -82,10 +93,17 @@ Keep every submit handler in the orchestration hook:
 ```ts
 export const usePayment = () => {
   const form = usePaymentForm();
-  const payment = useProcessPayment();
+  const {
+    processPayment,
+    paymentReceipt,
+    errorMessage,
+    isPending,
+    isSuccess,
+    isError,
+  } = useProcessPayment();
 
   const onSubmit = form.handleSubmit((values) => {
-    payment.processPayment(
+    processPayment(
       transformPaymentFormValuesToProcessPaymentArgs(values),
     );
   });
@@ -93,11 +111,11 @@ export const usePayment = () => {
   return {
     form,
     onSubmit,
-    paymentReceipt: payment.paymentReceipt,
-    errorMessage: payment.errorMessage,
-    isPending: payment.isPending,
-    isSuccess: payment.isSuccess,
-    isError: payment.isError,
+    paymentReceipt,
+    errorMessage,
+    isPending,
+    isSuccess,
+    isError,
   };
 };
 ```

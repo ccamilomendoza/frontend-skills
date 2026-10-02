@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hexagonal Backend Permissive (System)"
+  short_description: "Structure permissive hexagonal backends"
+  default_prompt: "Use $hexagonal-backend-permissive-system to structure this TypeScript backend with permissive acyclic module imports."

@@ -323,9 +323,8 @@ Use:
 
 ```ts
 ProcessPaymentDependencies
-ProcessPaymentArgs
+PrepareCheckoutArgs
 FetchUserProfileDependencies
-FetchUserProfileArgs
 ```
 
 Avoid:
@@ -338,8 +337,13 @@ ProcessPaymentCommand
 ProcessPaymentPayload
 ```
 
-Use case parameter objects are called `Args`, not `Input`, `Request`,
-`Command`, or `Payload`.
+When a use case needs its own parameter object, call it `Args`, not `Input`,
+`Request`, `Command`, or `Payload`. Reuse an existing domain or port request
+type directly when it already expresses the input; do not add an alias only
+to give it an `Args` name. The same applies to an unchanged error type.
+
+Destructure object parameters and returned objects when their fields are used
+individually. Keep the object intact when passing or validating it as a whole.
 
 ### Query Use Cases
 
@@ -362,11 +366,9 @@ Query use cases bind args inside `Dependencies` and return a no-argument thunk.
 This supports passing the returned function directly to React Query's `queryFn`.
 
 ```ts
-export type FetchUserProfileArgs = FetchUserProfilePortRequest;
-
 export interface FetchUserProfileDependencies {
   readonly fetchUserProfile: FetchUserProfilePort;
-  readonly args: FetchUserProfileArgs;
+  readonly args: FetchUserProfilePortRequest;
 }
 
 export type FetchUserProfileUseCase = (
@@ -374,9 +376,9 @@ export type FetchUserProfileUseCase = (
 ) => () => Promise<Result<UserProfile, FetchUserProfileError>>;
 
 export const makeFetchUserProfileUseCase: FetchUserProfileUseCase =
-  (dependencies) =>
+  ({ fetchUserProfile, args }) =>
   async () =>
-    dependencies.fetchUserProfile(dependencies.args);
+    fetchUserProfile(args);
 ```
 
 ### Mutation Use Cases
@@ -399,24 +401,16 @@ export interface ProcessPaymentDependencies {
   readonly chargePayment: ChargePaymentPort;
 }
 
-export interface ProcessPaymentArgs {
-  readonly orderId: OrderId;
-  readonly amount: Money;
-}
-
 export type ProcessPaymentUseCase = (
   dependencies: ProcessPaymentDependencies,
 ) => (
-  args: ProcessPaymentArgs,
+  request: ChargePaymentPortRequest,
 ) => Promise<Result<Receipt, ProcessPaymentError>>;
 
 export const makeProcessPaymentUseCase: ProcessPaymentUseCase =
-  (dependencies) =>
-  async (args) =>
-    dependencies.chargePayment({
-      orderId: args.orderId,
-      amount: args.amount,
-    });
+  ({ chargePayment }) =>
+  async (request) =>
+    chargePayment(request);
 ```
 
 ### Use Cases That Coordinate Pure Domain Logic
@@ -440,16 +434,16 @@ export type PrepareCheckoutUseCase = (
   args: PrepareCheckoutArgs,
 ) => Result<PreparedCheckout, PrepareCheckoutError>;
 
-export const prepareCheckoutUseCase: PrepareCheckoutUseCase = (args) => {
-  const eligible = canCheckout(args.cart, args.wallet);
+export const prepareCheckoutUseCase: PrepareCheckoutUseCase = ({ cart, wallet }) => {
+  const eligible = canCheckout(cart, wallet);
 
   if (!eligible) {
     return err({ type: "InsufficientFunds" });
   }
 
   return ok({
-    cart: args.cart,
-    total: calculateCheckoutTotal(args.cart),
+    cart,
+    total: calculateCheckoutTotal(cart),
   });
 };
 ```
@@ -459,14 +453,18 @@ that behavior for a concrete application workflow.
 
 ### Args Ownership
 
-When use case args have the same shape as the port request they delegate to,
-reuse the port request type:
+When a domain type or port request already expresses the use-case input, use it
+directly:
 
 ```ts
-export type FetchUserProfileArgs = FetchUserProfilePortRequest;
+export type ProcessPaymentUseCase = (
+  dependencies: ProcessPaymentDependencies,
+) => (
+  request: ChargePaymentPortRequest,
+) => Promise<Result<Receipt, ProcessPaymentError>>;
 ```
 
-When the use case needs application-only fields, extend the port request:
+When the use case needs application-only fields, define its own input:
 
 ```ts
 export interface FetchUserProfileArgs extends FetchUserProfilePortRequest {
@@ -474,8 +472,8 @@ export interface FetchUserProfileArgs extends FetchUserProfilePortRequest {
 }
 ```
 
-This avoids duplicate request-like shapes that drift while still allowing the
-application layer to add fields when the workflow needs them.
+This avoids duplicate request-like shapes and redundant aliases while still
+allowing the application layer to add fields when the workflow needs them.
 
 ### Use Case Return Types
 
@@ -828,8 +826,10 @@ Write boundary:
 use case args -> make<Entity> -> port
 ```
 
-The same pure domain rules may be reused by UI form validation through the
-framework-specific UI layer.
+UI form schemas may use built-in validation methods for immediate feedback.
+When they must enforce an exact domain rule, they reuse domain-owned policy
+values in those methods or call a pure domain predicate through a refinement.
+The domain constructor remains the final authority for valid domain values.
 
 ## Permissive Module Interaction
 
@@ -948,7 +948,7 @@ Port error:              FetchUserProfilePortError
 Use case type:           FetchUserProfileUseCase
 Use case factory:        makeFetchUserProfileUseCase
 Use case dependencies:   FetchUserProfileDependencies
-Use case args:           FetchUserProfileArgs
+Distinct use case args:  PrepareCheckoutArgs
 Adapter:                 makeHttpFetchUserProfileAdapter
 Adapter dependencies:    HttpFetchUserProfileAdapterDependencies
 DTO:                     UserDto

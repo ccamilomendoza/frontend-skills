@@ -16,14 +16,16 @@ code inside `infrastructure/ui/`, apply `react-hexagonal-ui-system` as well.
 ## Workflow
 
 1. Identify bounded contexts and assign each capability to one owning module.
-2. Model immutable domain data and pure invariant-preserving functions.
+2. Declare immutable domain data in `domain/entities/` and implement pure
+   invariant-preserving functions in `domain/services/`.
 3. Declare narrow domain ports for capabilities requiring I/O.
 4. Implement application use cases that coordinate domain behavior and ports.
 5. Implement external-boundary adapters under `infrastructure/server/`.
 6. Compose adapters and use cases from `infrastructure/ui/` or a neutral app
    composition root.
 7. Add cross-module edges only through the provider module's public use cases.
-8. Verify layer direction, module acyclicity, and `shared` governance.
+8. Verify entity files contain declarations only, layer direction, module
+   acyclicity, and `shared` governance.
 
 ## Canonical Structure
 
@@ -31,8 +33,8 @@ code inside `infrastructure/ui/`, apply `react-hexagonal-ui-system` as well.
 src/modules/
   <feature>/
     domain/
-      entities/
-      services/
+      entities/                 # readonly interface declarations only
+      services/                 # pure domain behavior and smart constructors
       ports/
       constants/
     application/
@@ -96,11 +98,17 @@ reach into B's private infrastructure.
 
 ## Core Modeling Rules
 
-- Use readonly interfaces for entities and value-like domain concepts.
-- Keep behavior in pure functions; do not use classes or mutable
+- Keep `domain/entities/` declaration-only: use readonly interfaces for
+  entities and value-like domain concepts, with type-only imports. Do not
+  define runtime values or functions there.
+- Put pure domain behavior, including predicates and smart constructors,
+  under `domain/services/`. Do not use classes or mutable
   closures-as-objects.
 - Put pure invariant checks in domain smart constructors such as
   `makeOrder(args): Result<Order, OrderDomainError>`.
+- Prefer destructuring object parameters and returned objects when their fields
+  are used individually. Keep an object intact when passing or validating it as
+  a whole; do not destructure only to reconstruct the same object.
 - Model ports as callable `...Port` types with one `...PortRequest` object and a
   narrow `...PortError` union.
 - Use hand-rolled `Result<T, E>` values across expected boundaries. Reserve
@@ -109,6 +117,11 @@ reach into B's private infrastructure.
 - Keep async operations async and synchronous operations synchronous.
 
 ## Use Cases
+
+Use an existing domain or port contract directly when it expresses a use-case
+parameter or result exactly. Declare a `...Args` interface only when the use
+case needs its own fields. Do not create a type alias solely to rename an
+unchanged input or error type.
 
 Use a curried factory when dependencies must be bound:
 
